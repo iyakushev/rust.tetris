@@ -1,0 +1,15 @@
+[package]
+name = "rust_tetris"
+version = "0.1.0"
+authors = ["iy <iamaero7@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.7.3"
+
+[dependencies.sdl2]
+    version = "0.33"
+    default-features = false
+    features = ["ttf","image"]
