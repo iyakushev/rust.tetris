@@ -68,32 +68,6 @@ impl Window {
         rect!(cx, cy, w, h)
     }
 
-    pub fn place_text(&mut self, text: &str, font: &str, size: u16, clr: Color, padding: u32) -> Result<(), String> {
-        let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
-        // Load a font
-        let mut font = ttf_context.load_font(Path::new("resources/AmazDooMLeft2.ttf"), 100)?;
-        // font.set_style(sdl2::ttf::FontStyle::BOLD);
-    
-        // render a surface, and convert it to a texture bound to the canvas
-        let surface = font.render(text)
-            .solid(Color::RGBA(255, 0, 0, 255)).map_err(|e| e.to_string())?;
-        let texture_creator = self.canvas.texture_creator();
-        let texture = texture_creator.create_texture_from_surface(&surface)
-            .map_err(|e| e.to_string())?;
-
-        self.canvas.set_draw_color(Color::RGBA(195, 217, 255, 255));
-        self.canvas.clear();
-
-        let TextureQuery { width, height, .. } = texture.query();
-
-        // If the example text is too big for the screen, downscale it (and center irregardless)
-        let target = self.get_centered_rect(width, height, self.width - padding, self.height - padding);
-
-        self.canvas.copy(&texture, None, Some(target))?;
-        self.canvas.present();
-        Ok(())
-    }
-
     pub fn set_color(&mut self, clr: Color) {
         self.canvas.set_draw_color(clr);
     }
