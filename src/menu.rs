@@ -5,7 +5,8 @@ use crate::engine::{render, text::Text};
 //Todo settings .ini
 //Todo cursor/selector indicator
 //Todo sounds
-
+//Todo background animation
+//Todo text animation
 
 pub fn run() -> Result<(), String>{
     let mut window = render::Window::new(800, 600);
