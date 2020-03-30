@@ -16,7 +16,7 @@ impl Text {
             content: content.to_string(),
             pos_x: x,
             pos_y: y,
-            font: "data/fonts/Bruzh.ttf".to_string(),
+            font: "data/fonts/sansation.ttf".to_string(),
             color: sdl2::pixels::Color::RGBA(0,0,0,255),
             size: size
         })
@@ -24,6 +24,10 @@ impl Text {
 
     pub fn change_text(&mut self, new_text: &str) {
         self.content = new_text.to_string();
+    }
+
+    pub fn contents(&self) -> &str {
+        &self.content
     }
 
     pub fn get_color(&self) -> sdl2::pixels::Color {

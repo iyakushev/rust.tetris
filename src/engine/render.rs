@@ -19,8 +19,12 @@ macro_rules! rect(
     )
 );
 
+pub fn anim_fade(window: Window) {
+
+}
+
 // Scale fonts to a reasonable size when they're too big (though they might look less smooth)
-fn scaled_rect(pos_x: u32, pos_y: u32, rect_width: u32, rect_height: u32, cons_width: u32, cons_height: u32) -> Rect {
+pub fn scaled_rect(pos_x: u32, pos_y: u32, rect_width: u32, rect_height: u32, cons_width: u32, cons_height: u32) -> Rect {
     let wr = rect_width as f32 / cons_width as f32;
     let hr = rect_height as f32 / cons_height as f32;
 
@@ -77,7 +81,19 @@ impl Window {
         self.canvas.clear();
     }
 
-    pub fn draw_text(&mut self, text_vec: Vec<Text>, padding: u32) -> Result<(), String> {
+    pub fn get_context(&self) -> &sdl2::Sdl {
+        &self.ctx
+    }
+
+    pub fn get_event_pump(&self) -> sdl2::EventPump{
+        self.ctx.event_pump().unwrap()
+    }
+
+    pub fn present(&mut self) {
+        self.canvas.present();
+    }
+
+    pub fn text_to_buf(&mut self, text_vec: &Vec<Text>, padding: u32) -> Result<(), String> {
         for text_obj in text_vec {
             // render a surface, and convert it to a texture bound to the canvas
             let surface = text_obj.get_surface(vec!())?;
@@ -92,7 +108,6 @@ impl Window {
     
             self.canvas.copy(&texture, None, Some(target))?;
         }
-        self.canvas.present();
         Ok(())
     }
 

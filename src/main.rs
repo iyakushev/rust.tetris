@@ -1,7 +1,7 @@
-mod tetris;
 mod engine;
-mod menu;
+mod runtime_logic;
 
+use runtime_logic::menu;
 use engine::{render,text::Text};
 use sdl2::pixels::Color;
 
