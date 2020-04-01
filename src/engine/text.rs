@@ -11,15 +11,19 @@ pub struct Text {
 
 
 impl Text {
-    pub fn new(content: &str, x: u32, y: u32, size: u16) -> Result<Self, String> {
-        Ok(Text {
+    pub fn new(content: &str, x: u32, y: u32, size: u16, color: Option<sdl2::pixels::Color>) -> Self {
+        let clr = match color {
+            Some(color) => color,
+            _ => sdl2::pixels::Color::RGBA(0,0,0,255),
+        };
+        Text {
             content: content.to_string(),
             pos_x: x,
             pos_y: y,
             font: "data/fonts/sansation.ttf".to_string(),
-            color: sdl2::pixels::Color::RGBA(0,0,0,255),
+            color: clr,
             size: size
-        })
+        }
     }
 
     pub fn change_text(&mut self, new_text: &str) {
@@ -53,7 +57,7 @@ impl Text {
             font.set_style(el);
         }
         let surface  = font.render(&self.content)
-            .solid(self.color)
+            .blended(self.color)
             .map_err(|e| e.to_string())?;
         Ok(surface)
     }

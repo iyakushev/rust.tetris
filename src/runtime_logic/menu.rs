@@ -18,23 +18,24 @@ macro_rules! rect(
     )
 );
 
-pub fn pop_in_box(text: &str, pos_x: u32, pos_y: u32) {
+pub fn save_name(text: &str, pos_x: u32, pos_y: u32) {
     // render::rect!();
 }
 
 
 pub fn run() -> Result<(), String>{
-    let mut window = render::Window::new(800, 600);
-    let mut menu_text = vec!(Text::new("Tetris", 260, 20, 100)?, 
-                         Text::new("New game", 300, 150, 40)?,
-                         Text::new("High score", 300, 200, 40)?,
-                         Text::new("Settings", 300, 250, 40)?,
-                         Text::new("Quit", 300, 300, 40)?);
+    let mut window = render::Window::new(320, 480);
+    let mut menu_text = vec!(
+                            Text::new("Tetris", 10, 20, 100, None), 
+                            Text::new("New game", 70, 150, 40, None),
+                            Text::new("High score", 70, 200, 40, None),
+                            Text::new("Settings", 70, 250, 40, None),
+                            Text::new("Quit", 70, 300, 40, None));
     window.draw_bg(Color::RGBA(195, 217, 255, 255));
-    window.text_to_buf(&menu_text, 100)?;
+    window.draw_text(&menu_text, 70)?;
     window.present();
 
-    let mut event_pump = window.get_event_pump();
+    let mut event_pump = window.create_event_pump();
     let mut cursor = 1;
     let mut i = 0;
     'running: loop {
@@ -58,9 +59,11 @@ pub fn run() -> Result<(), String>{
                         cursor += 1;
                     }
                 }
-                Event::KeyDown { keycode: Some(Keycode::KpEnter), ..} => {
+                Event::KeyDown { keycode: Some(Keycode::Space), ..} => {
+                    println!("CUR_POS: {}", cursor);
                     match cursor {
-                        1 => tetris::run(),
+                        1 => break 'running,
+                        4 => break 'running,
                         _ => (),
                     }
                 }
@@ -69,11 +72,15 @@ pub fn run() -> Result<(), String>{
         }
         // The rest of the game loop goes here...
         menu_text[cursor].set_color(Color::RGBA(255, 255, 255, 255));
-        window.text_to_buf(&menu_text, 100)?;
+        window.draw_text(&menu_text, 100)?;
         window.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 
+    match cursor {
+        1 => tetris::run(&mut window, &mut event_pump)?,
+        _ => (),
+    }
 
     Ok(())
 }

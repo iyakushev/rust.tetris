@@ -5,10 +5,11 @@ use sdl2::{
     event::Event,
     keyboard::Keycode,
     render::TextureQuery,
-    ttf::FontStyle,
-    rect::Rect 
+    rect::Rect,
+    image::{LoadTexture, InitFlag}
 };
 use std::time::Duration;
+use std::path::Path;
 use super::text::Text;
 
 
@@ -19,9 +20,6 @@ macro_rules! rect(
     )
 );
 
-pub fn anim_fade(window: Window) {
-
-}
 
 // Scale fonts to a reasonable size when they're too big (though they might look less smooth)
 pub fn scaled_rect(pos_x: u32, pos_y: u32, rect_width: u32, rect_height: u32, cons_width: u32, cons_height: u32) -> Rect {
@@ -48,18 +46,19 @@ pub fn scaled_rect(pos_x: u32, pos_y: u32, rect_width: u32, rect_height: u32, co
 //Main application struct
 pub struct Window {
     canvas: sdl2::render::WindowCanvas,
-    width: u32,
-    height: u32,
-    ctx: sdl2::Sdl
+    pub width: u32,
+    pub height: u32,
+    ctx: sdl2::Sdl,
+    img_ctx: sdl2::image::Sdl2ImageContext
 }
 
 impl Window {
     pub fn new(width: u32, height: u32) -> Self {
         let ctx = sdl2::init().unwrap();
-
+        let img_ctx = sdl2::image::init(InitFlag::PNG | InitFlag::JPG).unwrap();
         let video_subsystem = ctx.video().unwrap();
      
-        let window = video_subsystem.window("Tetris", 800, 600)
+        let window = video_subsystem.window("Tetris", width, height)
             .position_centered()
             .build()
             .unwrap();
@@ -68,7 +67,8 @@ impl Window {
             canvas: window.into_canvas().build().unwrap(),
             width: width,
             height: height,
-            ctx: ctx
+            ctx: ctx,
+            img_ctx: img_ctx
         }
     }
 
@@ -76,24 +76,17 @@ impl Window {
         self.canvas.set_draw_color(clr);
     }
 
+    pub fn draw_line(&mut self, color: Color, start: (i32,i32), finish: (i32,i32)) {
+        self.canvas.set_draw_color(color);
+        self.canvas.draw_line(start, finish);
+    }
+
     pub fn draw_bg(&mut self, color: Color) {
         self.canvas.set_draw_color(color);
         self.canvas.clear();
     }
 
-    pub fn get_context(&self) -> &sdl2::Sdl {
-        &self.ctx
-    }
-
-    pub fn get_event_pump(&self) -> sdl2::EventPump{
-        self.ctx.event_pump().unwrap()
-    }
-
-    pub fn present(&mut self) {
-        self.canvas.present();
-    }
-
-    pub fn text_to_buf(&mut self, text_vec: &Vec<Text>, padding: u32) -> Result<(), String> {
+    pub fn draw_text(&mut self, text_vec: &Vec<Text>, padding: u32) -> Result<(), String> {
         for text_obj in text_vec {
             // render a surface, and convert it to a texture bound to the canvas
             let surface = text_obj.get_surface(vec!())?;
@@ -109,6 +102,29 @@ impl Window {
             self.canvas.copy(&texture, None, Some(target))?;
         }
         Ok(())
+    }
+
+    pub fn get_context(&self) -> &sdl2::Sdl {
+        &self.ctx
+    }
+
+    pub fn create_event_pump(&self) -> sdl2::EventPump{
+        self.ctx.event_pump().unwrap()
+    }
+
+    pub fn present(&mut self) {
+        self.canvas.present();
+    }
+
+    pub fn load_texture(&mut self, png: &Path, src: Option<Rect>, dst: Option<Rect>) -> Result<(), String> {
+        let texture_c = self.canvas.texture_creator();
+        let texture = texture_c.load_texture(png)?;
+        self.canvas.copy(&texture, src, dst)?;
+        Ok(())
+    }
+
+    pub fn texture_to_buffer(&mut self, texture: &sdl2::render::Texture, src: Option<Rect>, dst: Option<Rect>) {
+        self.canvas.copy(texture, src, dst).unwrap();
     }
 
     pub fn run(&mut self) {     
