@@ -6,8 +6,8 @@ use std::time::Duration;
 use crate::engine::{render, text::Text};
 use super::tetris;
 
-//Todo scale and positioning
-//Todo settings .ini
+//Todo scale interface
+    // |-> Todo settings .ini
 //Todo sounds
 //Todo background animation
 //Todo text animation
@@ -26,7 +26,7 @@ pub fn save_name(text: &str, pos_x: u32, pos_y: u32) {
 pub fn run() -> Result<(), String>{
     let mut window = render::Window::new(320, 480);
     let mut menu_text = vec!(
-                            Text::new("Tetris", 10, 20, 100, None), 
+                            Text::new("Tetris!", 10, 20, 100, None),
                             Text::new("New game", 70, 150, 40, None),
                             Text::new("High score", 70, 200, 40, None),
                             Text::new("Settings", 70, 250, 40, None),
@@ -60,7 +60,6 @@ pub fn run() -> Result<(), String>{
                     }
                 }
                 Event::KeyDown { keycode: Some(Keycode::Space), ..} => {
-                    println!("CUR_POS: {}", cursor);
                     match cursor {
                         1 => break 'running,
                         4 => break 'running,

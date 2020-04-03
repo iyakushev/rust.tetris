@@ -28,11 +28,11 @@ pub fn scaled_rect(pos_x: u32, pos_y: u32, rect_width: u32, rect_height: u32, co
 
     let (w, h) = if wr > 1f32 || hr > 1f32 {
         if wr > hr {
-            println!("Scaling down! The text will look worse!");
+            // println!("Scaling down! The text will look worse!");
             let h = (rect_height as f32 / wr) as i32;
             (cons_width as i32, h)
         } else {
-            println!("Scaling down! The text will look worse!");
+            // println!("Scaling down! The text will look worse!");
             let w = (rect_width as f32 / hr) as i32;
             (w, cons_height as i32)
         }
@@ -98,7 +98,7 @@ impl Window {
     
             // If the example text is too big for the screen, downscale it (and center irregardless)
             let target = scaled_rect(text_obj.pos_x, text_obj.pos_y, width, height, self.width - padding, self.height - padding);
-    
+
             self.canvas.copy(&texture, None, Some(target))?;
         }
         Ok(())
