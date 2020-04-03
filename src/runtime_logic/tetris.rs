@@ -6,7 +6,8 @@ use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::Color,
-    rect::Rect
+    rect::Rect,
+    timer::Timer,
 };
 
 use crate::engine::{render, text::Text};
@@ -147,10 +148,13 @@ impl Tetromino {
 pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Result<(), String> {
     let mut tetromino = Tetromino::new(rand::random());
     let mut next_tetr = Tetromino::new(rand::random());
+
     // let mut pocket_tm = None;
 
     let mut level = 1;
-    let mut score: u32 = 0;
+    let mut score = 0;
+    let mut timer = 0;
+    let mut field:Vec<Tetromino> = vec![];
 
     let ui_bottom_offset = (window.height - 54) as i32;
     const WHITE: Color = Color::RGBA(255, 255,255,255);
@@ -158,7 +162,7 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
     let border_left: u32 = 18*4-3;
     let border_right: u32 = window.width - 18*4+4;
     let ui = vec!(Text::new("Score:", 10, 10, 15, Some(WHITE)),
-                  Text::new(&score.to_string(), 55, 11, 15, Some(WHITE)),
+                  Text::new("000000", 55, 11, 15, Some(WHITE)),
                   Text::new("Level:", 14, 30, 15, Some(WHITE)),
                   Text::new(&level.to_string(), 55, 31 , 15, Some(WHITE)),
                   Text::new("NEXT:", 165, 10, 15, Some(WHITE)),
@@ -169,11 +173,12 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
                   Text::new("Time:", 128, ui_bottom_offset as u32 + 10, 15, Some(WHITE)),
                   Text::new("000", 130, ui_bottom_offset as u32 + 31, 15, Some(WHITE)),
                   Text::new("Pocket:", 190, ui_bottom_offset as u32 + 10, 15, Some(WHITE)));
+    next_tetr.pos_x = 12;
+    next_tetr.pos_y = 0;
 
     'running: loop {
         //Todo miami mode
         window.draw_bg(Color::RGBA(0, 0, 0, 255));
-
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
@@ -208,8 +213,14 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
         window.draw_line(WHITE, (0, ui_bottom_offset), (window.width as i32, ui_bottom_offset));
         window.draw_text(&ui, 0)?;
         tetromino.draw(window);
+        next_tetr.draw(window);
         
         window.present();
+        ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 60)); // 1 tick
+        if timer >= 60 {
+            tetromino.pos_y += 1;
+            timer = 0;
+        } else {timer += 1}
     }
 
     Ok(())
