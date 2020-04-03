@@ -1,12 +1,14 @@
-use crate::engine::{render, text::Text};
+use std::path::Path;
+
+use rand::{distributions::{Distribution, Standard}, Rng};
 use sdl2::{
-    pixels::Color,
     event::Event,
     keyboard::Keycode,
+    pixels::Color,
     rect::Rect
 };
-use rand::{distributions::{Distribution, Standard}, Rng};
-use std::path::Path;
+
+use crate::engine::{render, text::Text};
 
 //Todo scale interface
 //Todo background animation
@@ -26,13 +28,13 @@ impl Shape {
     ///Returns a corresponding matrix shape of a figure
     pub fn matrix(&self) -> [u8; 4] {
         match self {
-            Shape::I => [1,3,5,7],
-            Shape::J => [3,5,7,6],
-            Shape::L => [2,3,5,7],
-            Shape::O => [2,3,4,5],
-            Shape::S => [3,5,4,6],
-            Shape::Z => [2,4,5,7],
-            Shape::T => [3,4,5,7],
+            Shape::I => [1,5,9,13],   //0, 1, 2, 3
+            Shape::J => [1,5,9,8],    //4, 5, 6, 7
+            Shape::L => [1,5,9,10],   //8, 9, 10, 11
+            Shape::O => [2,3,6,7],    //12, 13, 14, 15
+            Shape::S => [0,4,5,9],
+            Shape::Z => [1,5,4,8],
+            Shape::T => [1,5,9,4],
         }
     }
 
@@ -67,8 +69,8 @@ impl Distribution<Shape> for Standard {
 #[derive(Debug)]
 struct Tetromino {
     shape: Shape,
-    pos_x: u32,
-    pos_y: u32,
+    pos_x: u32, // Coordinates with respect to the tile size: 0 -> t_size
+    pos_y: u32, // Coordinates with respect to the tile size: 0 -> t_size
     t_size: u8,
     m_shape: [u8; 4],
     color_offset: u8,
@@ -80,8 +82,8 @@ impl Tetromino {
             m_shape: shape.matrix(),
             color_offset: shape.texture_offset(),
             shape: shape,
-            pos_x: 160,
-            pos_y: 100,
+            pos_x: 10,
+            pos_y: 0,
             t_size: 18
         }
     }
@@ -91,27 +93,31 @@ impl Tetromino {
     }
 
     pub fn rotate(&mut self, r: u8) {
-        // match angle {
-        //     0 => ,
-        //     1 => ,
-        //     2 => ,
-        //     3 => ,
-        // }
+        let center = self.m_shape[1];
+        for offset in self.m_shape.iter_mut() {
+
+            // window.load_texture(Path::new("data/art/tiles.png"),
+            //                     rect!(self.color_offset, 0, self.t_size, self.t_size),
+            //                     rect!(x, y, self.t_size, self.t_size)).unwrap();
+        }
     }
 
-    pub fn make_move(&mut self, direction: i8, lborder: u32, rborder: u32) {
-        if self.pos_x > lborder && self.pos_x < rborder {
-            self.pos_x = ((direction * self.t_size as i8) as i32 + self.pos_x as i32) as u32;
+    pub fn make_move(&mut self, direction: i8) {
+        let new_pos = (direction as i32 + self.pos_x as i32) as u32;
+        if new_pos < 4 || new_pos > 12 { // Hardcoded borders
+            ()
+        } else {
+            self.pos_x = new_pos
         }
     }
 
     pub fn draw(&self, window: &mut render::Window) {
         for offset in self.m_shape.iter() {
-            let x = self.pos_x + ((offset%2) * self.t_size) as u32;
-            let y = self.pos_y+ ((offset/2)*self.t_size) as u32;
+            let x = self.pos_x + (offset%4*1) as u32;
+            let y = self.pos_y + (offset/4*1) as u32;
             window.load_texture(Path::new("data/art/tiles.png"),
                             rect!(self.color_offset, 0, self.t_size, self.t_size),
-                            rect!(x, y, self.t_size, self.t_size)).unwrap();
+                            rect!(x * self.t_size as u32, y * self.t_size as u32, self.t_size, self.t_size)).unwrap();
         }
     }
 }
@@ -120,8 +126,9 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
     let mut tetromino = Tetromino::new(rand::random());
     let ui_bottom_offset = (window.height - 54) as i32;
     const WHITE: Color = Color::RGBA(255, 255,255,255);
-    let border_left: u32 = 18*4;
-    let border_right: u32 = window.width - 18*4;
+    const UI_H: i32 = 54;
+    let border_left: u32 = 18*4-3;
+    let border_right: u32 = window.width - 18*4+4;
     let ui = vec!(Text::new("Score:", 10, 10, 15, Some(WHITE)),
                   Text::new("000000", 55, 11, 15, Some(WHITE)),
                   Text::new("Level:", 14, 30, 15, Some(WHITE)),
@@ -149,23 +156,26 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
                     tetromino = Tetromino::new(rand::random());
                 }
                 Event::KeyDown { keycode: Some(Keycode::Left), ..} => {
-                    tetromino.make_move(-1, border_left, border_right);
+                    tetromino.make_move(-1);
                 }
                 Event::KeyDown { keycode: Some(Keycode::Right), ..} => {
-                    tetromino.make_move(1, border_left, border_right);
+                    tetromino.make_move(1);
+                }
+                Event::KeyDown { keycode: Some(Keycode::E), ..} => {
+                    tetromino.rotate(1);
                 }
                 _ => {}
             }
         }
 
-        window.draw_line(WHITE, (0,54), (window.width as i32, 54));
-        window.draw_line(WHITE, (145,0), (145, 54));
-        window.draw_line(WHITE, (18*4-3,ui_bottom_offset), (18*4-3, 54));
-        window.draw_line(WHITE, ((window.width - 18*4+2) as i32,ui_bottom_offset), ((window.width - 18*4+2) as i32, 54));
+        window.draw_line(WHITE, (0,UI_H), (window.width as i32, UI_H));
+        window.draw_line(WHITE, (145,0), (145, UI_H));
+        window.draw_line(WHITE, (border_left as i32, ui_bottom_offset), (border_left as i32, UI_H));
+        window.draw_line(WHITE, (border_right as i32,ui_bottom_offset), (border_right as i32, UI_H));
         window.draw_line(WHITE, (120,ui_bottom_offset), (120, window.height as i32));
         window.draw_line(WHITE, (170,ui_bottom_offset), (170, window.height as i32));
-        window.draw_text(&ui, 0)?;
         window.draw_line(WHITE, (0, ui_bottom_offset), (window.width as i32, ui_bottom_offset));
+        window.draw_text(&ui, 0)?;
         tetromino.draw(window);
         
         window.present();
