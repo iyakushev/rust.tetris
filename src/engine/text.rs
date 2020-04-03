@@ -1,9 +1,11 @@
+use std::borrow::Borrow;
 use std::path::Path;
 
 pub struct Text {
     content: String,
     pub pos_x: u32,
     pub pos_y: u32,
+    hint: sdl2::ttf::Hinting,
     color: sdl2::pixels::Color,
     font: String,
     size: u16
@@ -20,6 +22,7 @@ impl Text {
             content: content.to_string(),
             pos_x: x,
             pos_y: y,
+            hint: sdl2::ttf::Hinting::Normal,
             font: "data/fonts/sansation.ttf".to_string(),
             color: clr,
             size: size
@@ -37,6 +40,8 @@ impl Text {
     pub fn get_color(&self) -> sdl2::pixels::Color {
         self.color
     }
+
+    pub fn set_hinting(&mut self, hint: sdl2::ttf::Hinting) { self.hint = hint }
 
     pub fn set_font(&mut self, font: &str) {
         self.font = format!("data/fonts/{}",font.to_string());
@@ -56,6 +61,7 @@ impl Text {
         for el in styles {
             font.set_style(el);
         }
+        font.set_hinting(self.hint.clone());
         let surface  = font.render(&self.content)
             .blended(self.color)
             .map_err(|e| e.to_string())?;

@@ -1,3 +1,4 @@
+use std::env::var;
 use std::path::Path;
 
 use rand::{distributions::{Distribution, Standard}, Rng};
@@ -14,6 +15,8 @@ use crate::engine::{render, text::Text};
 //Todo background animation
 //Todo ghosting/shadow
 //Todo rotation
+//Todo APM
+//Todo Timer
 
 macro_rules! rect(
     ($x:expr, $y:expr, $w:expr, $h:expr) => (
@@ -23,18 +26,19 @@ macro_rules! rect(
 
 #[derive(Debug)]
 enum Shape { I, T, L, J, S, Z, O}
+enum Rotation {Right, Left}
 
 impl Shape {
     ///Returns a corresponding matrix shape of a figure
     pub fn matrix(&self) -> [u8; 4] {
         match self {
-            Shape::I => [1,5,9,13],   //0, 1, 2, 3
-            Shape::J => [1,5,9,8],    //4, 5, 6, 7
-            Shape::L => [1,5,9,10],   //8, 9, 10, 11
+            Shape::I => [4,5,6,7],    // 0,  1,  2,  3
+            Shape::J => [0,4,5,6],    // 4,  5,  6,  7
+            Shape::L => [3,5,6,7],    // 8,  9, 10, 11
             Shape::O => [2,3,6,7],    //12, 13, 14, 15
-            Shape::S => [0,4,5,9],
-            Shape::Z => [1,5,4,8],
-            Shape::T => [1,5,9,4],
+            Shape::S => [2,3,5,6],
+            Shape::Z => [0,1,5,6],
+            Shape::T => [1,4,5,6],
         }
     }
 
@@ -66,6 +70,7 @@ impl Distribution<Shape> for Standard {
     }
 }
 
+
 #[derive(Debug)]
 struct Tetromino {
     shape: Shape,
@@ -73,12 +78,14 @@ struct Tetromino {
     pos_y: u32, // Coordinates with respect to the tile size: 0 -> t_size
     t_size: u8,
     m_shape: [u8; 4],
+    r_angle: usize,
     color_offset: u8,
 }
 
 impl Tetromino {
     pub fn new(shape: Shape) -> Self {
         Tetromino {
+            r_angle: 0,
             m_shape: shape.matrix(),
             color_offset: shape.texture_offset(),
             shape: shape,
@@ -92,14 +99,28 @@ impl Tetromino {
         &self.shape
     }
 
-    pub fn rotate(&mut self, r: u8) {
-        let center = self.m_shape[1];
-        for offset in self.m_shape.iter_mut() {
-
-            // window.load_texture(Path::new("data/art/tiles.png"),
-            //                     rect!(self.color_offset, 0, self.t_size, self.t_size),
-            //                     rect!(x, y, self.t_size, self.t_size)).unwrap();
+    // does fixed angle rotation to acknowledge T-spin/wall kicks, save on performance
+    pub fn rotate(&mut self, r: Rotation) {
+        let variations: [[u8;4];4] = match self.shape {
+            Shape::I => [[4,5,6,7], [2,6,10,14], [8,9,10,11], [1,5,9,13]],  // 0,  1,  2,  3
+            Shape::J => [[0,4,5,6], [1,2,5,9], [4,5,6,10], [1,5,8,9]],      // 4,  5,  6,  7
+            Shape::L => [[3,5,6,7], [2,6,10,11], [5,6,7,9], [1,2,6,10]],    // 8,  9, 10, 11
+            Shape::O => [[2,3,6,7], [2,3,6,7], [2,3,6,7], [2,3,6,7]],       //12, 13, 14, 15
+            Shape::S => [[2,3,5,6], [2,6,7,11], [6,7,9,10], [1,5,6,10]],
+            Shape::Z => [[0,1,5,6], [2,5,6,9], [4,5,9,10], [1,4,5,8]],
+            Shape::T => [[1,4,5,6], [1,5,6,9], [4,5,6,9], [1,4,5,9]],
+        };
+        match r {
+            Rotation::Right => {
+                if self.r_angle < 3 {self.r_angle += 1}
+                else {self.r_angle = 0}
+            },
+            Rotation::Left => {
+                if self.r_angle > 0 {self.r_angle -= 1}
+                else {self.r_angle = 3}
+            }
         }
+        self.m_shape = variations[self.r_angle];
     }
 
     pub fn make_move(&mut self, direction: i8) {
@@ -122,17 +143,24 @@ impl Tetromino {
     }
 }
 
+
 pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Result<(), String> {
     let mut tetromino = Tetromino::new(rand::random());
+    let mut next_tetr = Tetromino::new(rand::random());
+    // let mut pocket_tm = None;
+
+    let mut level = 1;
+    let mut score: u32 = 0;
+
     let ui_bottom_offset = (window.height - 54) as i32;
     const WHITE: Color = Color::RGBA(255, 255,255,255);
     const UI_H: i32 = 54;
     let border_left: u32 = 18*4-3;
     let border_right: u32 = window.width - 18*4+4;
     let ui = vec!(Text::new("Score:", 10, 10, 15, Some(WHITE)),
-                  Text::new("000000", 55, 11, 15, Some(WHITE)),
+                  Text::new(&score.to_string(), 55, 11, 15, Some(WHITE)),
                   Text::new("Level:", 14, 30, 15, Some(WHITE)),
-                  Text::new("01", 55, 31 , 15, Some(WHITE)),
+                  Text::new(&level.to_string(), 55, 31 , 15, Some(WHITE)),
                   Text::new("NEXT:", 165, 10, 15, Some(WHITE)),
                   Text::new("APM:", 15, ui_bottom_offset as u32 + 10, 15, Some(WHITE)),
                   Text::new("000", 55, ui_bottom_offset as u32 + 11, 15, Some(WHITE)),
@@ -154,15 +182,18 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
                 },
                 Event::KeyDown { keycode: Some(Keycode::R), ..} => {
                     tetromino = Tetromino::new(rand::random());
-                }
+                },
                 Event::KeyDown { keycode: Some(Keycode::Left), ..} => {
                     tetromino.make_move(-1);
-                }
+                },
                 Event::KeyDown { keycode: Some(Keycode::Right), ..} => {
                     tetromino.make_move(1);
-                }
+                },
                 Event::KeyDown { keycode: Some(Keycode::E), ..} => {
-                    tetromino.rotate(1);
+                    tetromino.rotate(Rotation::Right);
+                },
+                Event::KeyDown { keycode: Some(Keycode::Q), ..} => {
+                    tetromino.rotate(Rotation::Left);
                 }
                 _ => {}
             }

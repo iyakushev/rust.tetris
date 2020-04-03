@@ -1,17 +1,18 @@
-extern crate sdl2; 
+extern crate sdl2;
+
+use std::path::Path;
+use std::time::Duration;
 
 use sdl2::{
-    pixels::Color,
     event::Event,
+    image::{InitFlag, LoadTexture},
     keyboard::Keycode,
-    render::TextureQuery,
+    pixels::Color,
     rect::Rect,
-    image::{LoadTexture, InitFlag}
+    render::TextureQuery
 };
-use std::time::Duration;
-use std::path::Path;
-use super::text::Text;
 
+use super::text::Text;
 
 // handle the annoying Rect i32
 macro_rules! rect(
@@ -76,9 +77,10 @@ impl Window {
         self.canvas.set_draw_color(clr);
     }
 
-    pub fn draw_line(&mut self, color: Color, start: (i32,i32), finish: (i32,i32)) {
+    pub fn draw_line(&mut self, color: Color, start: (i32,i32), finish: (i32,i32)) -> Result<(), String> {
         self.canvas.set_draw_color(color);
-        self.canvas.draw_line(start, finish);
+        self.canvas.draw_line(start, finish)?;
+        Ok(())
     }
 
     pub fn draw_bg(&mut self, color: Color) {
