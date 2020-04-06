@@ -1,5 +1,6 @@
-use std::env::var;
+use std::ops::Deref;
 use std::path::Path;
+use std::process::exit;
 
 use rand::{distributions::{Distribution, Standard}, Rng};
 use sdl2::{
@@ -10,174 +11,145 @@ use sdl2::{
     timer::Timer,
 };
 
-use crate::engine::{render, text::Text};
+use crate::engine::{render, text::cast_with_capacity, text::Text};
+use crate::engine::render::Window;
 
-//Todo scale interface
-//Todo background animation
-//Todo ghosting/shadow
-//Todo rotation
-//Todo APM
-//Todo Timer
+use super::tetromino::{Rotation, Shape, Tetromino};
 
-macro_rules! rect(
-    ($x:expr, $y:expr, $w:expr, $h:expr) => (
-        Some(Rect::new($x as i32, $y as i32, $w as u32, $h as u32))
-    )
-);
+const GRAVITY: f32 = 50.0;
+const WHITE: Color = Color::RGBA(255, 255,255,255);
+const H_UI: i32 = 54;
+const SZ_TILE: u32 = 18;
 
-#[derive(Debug)]
-enum Shape { I, T, L, J, S, Z, O}
-enum Rotation {Right, Left}
-
-impl Shape {
-    ///Returns a corresponding matrix shape of a figure
-    pub fn matrix(&self) -> [u8; 4] {
-        match self {
-            Shape::I => [4,5,6,7],    // 0,  1,  2,  3
-            Shape::J => [0,4,5,6],    // 4,  5,  6,  7
-            Shape::L => [3,5,6,7],    // 8,  9, 10, 11
-            Shape::O => [2,3,6,7],    //12, 13, 14, 15
-            Shape::S => [2,3,5,6],
-            Shape::Z => [0,1,5,6],
-            Shape::T => [1,4,5,6],
-        }
-    }
-
-    ///Returns a corresponding shift in texture
-    pub fn texture_offset(&self) -> u8 {
-        match self {
-            Shape::I => 5*18,
-            Shape::J => 0,
-            Shape::L => 6*18,
-            Shape::O => 4*18,
-            Shape::S => 3*18,
-            Shape::Z => 2*18,
-            Shape::T => 18,
-        }
-    }
+pub struct Field {
+    pieces: Vec<Tetromino>,
+    pocket: Option<Tetromino>,
+    cursor: usize,
+    pub pocketed: bool,
+    pub level: u8,
+    pub score: u16,
+    pub time: u16
 }
 
-impl Distribution<Shape> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Shape {
-        match rng.gen_range(0, 6) {
-            0 => Shape::I,
-            1 => Shape::T,
-            2 => Shape::L,
-            3 => Shape::J,
-            4 => Shape::S,
-            5 => Shape::Z,
-            _ => Shape::O
-        }
-    }
-}
-
-
-#[derive(Debug)]
-struct Tetromino {
-    shape: Shape,
-    pos_x: u32, // Coordinates with respect to the tile size: 0 -> t_size
-    pos_y: u32, // Coordinates with respect to the tile size: 0 -> t_size
-    t_size: u8,
-    m_shape: [u8; 4],
-    r_angle: usize,
-    color_offset: u8,
-}
-
-impl Tetromino {
-    pub fn new(shape: Shape) -> Self {
-        Tetromino {
-            r_angle: 0,
-            m_shape: shape.matrix(),
-            color_offset: shape.texture_offset(),
-            shape: shape,
-            pos_x: 10,
-            pos_y: 0,
-            t_size: 18
+impl Field {
+    /// Creates a new instance
+    pub fn new() -> Self {
+        let mut v = vec![Tetromino::new(rand::random()), Tetromino::new(rand::random())];
+        v[0].set_default_pos();
+        v[1].set_for_next();
+        Field {
+            pieces: v,
+            pocket: None,
+            pocketed: false,
+            cursor: 0,
+            level: 1,
+            score: 0,
+            time: 0
         }
     }
 
-    pub fn id(&self) -> &Shape {
-        &self.shape
+    /// Changes level and returns new G_AMPLIFIER value
+    pub fn next_lvl(&mut self) -> f32 {
+        self.level += 1;
+        self.get_amplifier()
     }
 
-    // does fixed angle rotation to acknowledge T-spin/wall kicks, save on performance
-    pub fn rotate(&mut self, r: Rotation) {
-        let variations: [[u8;4];4] = match self.shape {
-            Shape::I => [[4,5,6,7], [2,6,10,14], [8,9,10,11], [1,5,9,13]],  // 0,  1,  2,  3
-            Shape::J => [[0,4,5,6], [1,2,5,9], [4,5,6,10], [1,5,8,9]],      // 4,  5,  6,  7
-            Shape::L => [[3,5,6,7], [2,6,10,11], [5,6,7,9], [1,2,6,10]],    // 8,  9, 10, 11
-            Shape::O => [[2,3,6,7], [2,3,6,7], [2,3,6,7], [2,3,6,7]],       //12, 13, 14, 15
-            Shape::S => [[2,3,5,6], [2,6,7,11], [6,7,9,10], [1,5,6,10]],
-            Shape::Z => [[0,1,5,6], [2,5,6,9], [4,5,9,10], [1,4,5,8]],
-            Shape::T => [[1,4,5,6], [1,5,6,9], [4,5,6,9], [1,4,5,9]],
-        };
-        match r {
-            Rotation::Right => {
-                if self.r_angle < 3 {self.r_angle += 1}
-                else {self.r_angle = 0}
-            },
-            Rotation::Left => {
-                if self.r_angle > 0 {self.r_angle -= 1}
-                else {self.r_angle = 3}
+    /// Returns new G_AMPLIFIER value
+    pub fn get_amplifier(&self) -> f32 {
+        match self.level {
+            1 => 1.0,
+            2 => 0.9,
+            3 => 0.8,
+            4 => 0.7,
+            5 => 0.6,
+            6 => 0.5,
+            7 => 0.4,
+            8 => 0.3,
+            9 => 0.2,
+            _ => 0.1,
+        }
+    }
+
+    /// Returns a ref to the current piece
+    pub fn current_piece(&mut self) -> &mut Tetromino {
+        &mut self.pieces[self.cursor]
+    }
+
+    /// Handles spawning of the new piece
+    pub fn next_piece(&mut self) {
+        self.pieces.push(Tetromino::new(rand::random()));
+        self.cursor += 1;
+        self.pieces[self.cursor].set_default_pos();
+        self.pieces[self.cursor+1].set_for_next();
+    }
+
+    /// Handles the logic of pocketing a piece
+    pub fn pocket(&mut self) {
+        if !self.pocketed {
+            if self.pocket.is_some() {
+                let next = self.pieces.pop().unwrap();
+                let mut new = self.pieces.pop().unwrap();
+                let mut piece = self.pocket.unwrap();
+
+                piece.set_default_pos();
+                new.set_to_pocket(); //Change pos
+
+                self.pieces.push(piece);
+                self.pieces.push(next);
+                self.pocket = Some(new);
+            } else {
+                let mut cur = self.pieces.pop().unwrap();
+                let mut new = Tetromino::new(rand::random());
+                let mut poc = self.pieces.pop().unwrap(); // Store
+
+                new.set_for_next();
+                cur.set_default_pos();
+                poc.set_to_pocket();
+
+                self.pieces.push(cur);           // Swap new CURRENT
+                self.pieces.push(new);           // Set new NEXT
+                self.pocket = Some(poc);         // Set new POCKET
             }
-        }
-        self.m_shape = variations[self.r_angle];
-    }
-
-    pub fn make_move(&mut self, direction: i8) {
-        let new_pos = (direction as i32 + self.pos_x as i32) as u32;
-        if new_pos < 4 || new_pos > 12 { // Hardcoded borders
-            ()
-        } else {
-            self.pos_x = new_pos
+            self.pocketed = true;
         }
     }
 
-    pub fn draw(&self, window: &mut render::Window) {
-        for offset in self.m_shape.iter() {
-            let x = self.pos_x + (offset%4*1) as u32;
-            let y = self.pos_y + (offset/4*1) as u32;
-            window.load_texture(Path::new("data/art/tiles.png"),
-                            rect!(self.color_offset, 0, self.t_size, self.t_size),
-                            rect!(x * self.t_size as u32, y * self.t_size as u32, self.t_size, self.t_size)).unwrap();
-        }
+    /// Draws pieces on the screen
+    pub fn draw(&mut self, window: &mut Window) {
+        self.pieces.iter().for_each(|t| t.draw(window).unwrap());
+        match self.pocket {
+            Some(t) => t.draw(window).unwrap(),
+            None => ()
+        };
     }
 }
 
 
 pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Result<(), String> {
-    let mut tetromino = Tetromino::new(rand::random());
-    let mut next_tetr = Tetromino::new(rand::random());
-
-    // let mut pocket_tm = None;
-
-    let mut level = 1;
-    let mut score = 0;
-    let mut timer = 0;
-    let mut field:Vec<Tetromino> = vec![];
+    let mut field = Field::new();
+    let mut timer = 0.0;
+    let mut g_amplifier = 1.0; // The less it becomes -- the faster pieces will fall
+    let mut accelerated = false;
+    let mut hard_drop = false;
 
     let ui_bottom_offset = (window.height - 54) as i32;
-    const WHITE: Color = Color::RGBA(255, 255,255,255);
-    const UI_H: i32 = 54;
-    let border_left: u32 = 18*4-3;
-    let border_right: u32 = window.width - 18*4+4;
-    let ui = vec!(Text::new("Score:", 10, 10, 15, Some(WHITE)),
-                  Text::new("000000", 55, 11, 15, Some(WHITE)),
-                  Text::new("Level:", 14, 30, 15, Some(WHITE)),
-                  Text::new(&level.to_string(), 55, 31 , 15, Some(WHITE)),
-                  Text::new("NEXT:", 165, 10, 15, Some(WHITE)),
-                  Text::new("APM:", 15, ui_bottom_offset as u32 + 10, 15, Some(WHITE)),
-                  Text::new("000", 55, ui_bottom_offset as u32 + 11, 15, Some(WHITE)),
-                  Text::new("Lines:", 10, ui_bottom_offset as u32 + 30, 15, Some(WHITE)),
-                  Text::new("000", 55, ui_bottom_offset as u32 + 31, 15, Some(WHITE)),
-                  Text::new("Time:", 128, ui_bottom_offset as u32 + 10, 15, Some(WHITE)),
-                  Text::new("000", 130, ui_bottom_offset as u32 + 31, 15, Some(WHITE)),
-                  Text::new("Pocket:", 190, ui_bottom_offset as u32 + 10, 15, Some(WHITE)));
-    next_tetr.pos_x = 12;
-    next_tetr.pos_y = 0;
+    let border_left: u32 = SZ_TILE*4-3;
+    let border_right: u32 = window.width - SZ_TILE*4+4;
+    let mut ui = vec!(Text::new("Score:", 10, 10, 15, Some(WHITE)),
+                      Text::new("000000", 55, 11, 15, Some(WHITE)),
+                      Text::new("Level:", 14, 30, 15, Some(WHITE)),
+                      Text::new("01", 55, 31 , 15, Some(WHITE)),
+                      Text::new("NEXT:", 165, 10, 15, Some(WHITE)),
+                      Text::new("APM:", 15, ui_bottom_offset as u32 + 10, 15, Some(WHITE)),
+                      Text::new("000", 55, ui_bottom_offset as u32 + 11, 15, Some(WHITE)),
+                      Text::new("Lines:", 10, ui_bottom_offset as u32 + 30, 15, Some(WHITE)),
+                      Text::new("000", 55, ui_bottom_offset as u32 + 31, 15, Some(WHITE)),
+                      Text::new("Time:", 128, ui_bottom_offset as u32 + 10, 15, Some(WHITE)),
+                      Text::new("000", 130, ui_bottom_offset as u32 + 31, 15, Some(WHITE)),
+                      Text::new("Pocket:", 190, ui_bottom_offset as u32 + 10, 15, Some(WHITE)));
 
+    //Todo miami mode
     'running: loop {
-        //Todo miami mode
         window.draw_bg(Color::RGBA(0, 0, 0, 255));
         for event in event_pump.poll_iter() {
             match event {
@@ -185,42 +157,73 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
-                Event::KeyDown { keycode: Some(Keycode::R), ..} => {
-                    tetromino = Tetromino::new(rand::random());
-                },
                 Event::KeyDown { keycode: Some(Keycode::Left), ..} => {
-                    tetromino.make_move(-1);
+                    if !hard_drop {
+                        field.current_piece().make_move(-1, 0);
+                    }
                 },
                 Event::KeyDown { keycode: Some(Keycode::Right), ..} => {
-                    tetromino.make_move(1);
+                    if !hard_drop {
+                        field.current_piece().make_move(1, 0);
+                    }
                 },
+                Event::KeyDown { keycode: Some(Keycode::Down), ..} => {
+                    if !accelerated {
+                        g_amplifier = (50.0*g_amplifier)/100.0;
+                        accelerated = true;
+                    }
+                }
+                Event::KeyUp { keycode: Some(Keycode::Down), ..} => {
+                    if accelerated {
+                        g_amplifier = (100.0*g_amplifier)/50.0;
+                        accelerated = false;
+                    }
+                }
+                Event::KeyUp { keycode: Some(Keycode::Up), ..} => {
+                    if !hard_drop {
+                        g_amplifier = 0.0;
+                        hard_drop = true;
+                    }
+                }
                 Event::KeyDown { keycode: Some(Keycode::E), ..} => {
-                    tetromino.rotate(Rotation::Right);
+                    field.current_piece().rotate(Rotation::Right);
                 },
                 Event::KeyDown { keycode: Some(Keycode::Q), ..} => {
-                    tetromino.rotate(Rotation::Left);
+                    field.current_piece().rotate(Rotation::Left);
+                }
+                Event::KeyDown { keycode: Some(Keycode::R), ..} => {
+                    field.pocket();
                 }
                 _ => {}
             }
         }
-
-        window.draw_line(WHITE, (0,UI_H), (window.width as i32, UI_H));
-        window.draw_line(WHITE, (145,0), (145, UI_H));
-        window.draw_line(WHITE, (border_left as i32, ui_bottom_offset), (border_left as i32, UI_H));
-        window.draw_line(WHITE, (border_right as i32,ui_bottom_offset), (border_right as i32, UI_H));
+        // DRAW UI OUTLINES
+        window.draw_line(WHITE, (0, H_UI), (window.width as i32, H_UI));
+        window.draw_line(WHITE, (145,0), (145, H_UI));
+        window.draw_line(WHITE, (border_left as i32, ui_bottom_offset), (border_left as i32, H_UI));
+        window.draw_line(WHITE, (border_right as i32,ui_bottom_offset), (border_right as i32, H_UI));
         window.draw_line(WHITE, (120,ui_bottom_offset), (120, window.height as i32));
         window.draw_line(WHITE, (170,ui_bottom_offset), (170, window.height as i32));
         window.draw_line(WHITE, (0, ui_bottom_offset), (window.width as i32, ui_bottom_offset));
-        window.draw_text(&ui, 0)?;
-        tetromino.draw(window);
-        next_tetr.draw(window);
-        
+
+        ui[1].change_text(&cast_with_capacity(field.score, 6)); // UPDATE SCORE
+        ui[3].change_text(&cast_with_capacity(field.level as u16, 2)); // UPDATE LEVEL
+        ui[10].change_text(&cast_with_capacity(field.time, 3)); // UPDATE TIME
+        window.draw_text(&ui, 0)?;            // DRAW USER INTERFACE
+        field.draw(window); // DRAW PIECES
+
         window.present();
-        ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 60)); // 1 tick
-        if timer >= 60 {
-            tetromino.pos_y += 1;
-            timer = 0;
-        } else {timer += 1}
+        ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 500)); // 1 tick
+        if timer >= GRAVITY * g_amplifier {
+            field.current_piece().make_move(0, 1);
+            if field.current_piece().stops_falling() {
+                field.pocketed = false;
+                field.next_piece();
+                if hard_drop { hard_drop = false; g_amplifier = field.get_amplifier();}
+            }
+            timer = 0.0;
+            field.time += 1;
+        } else {timer += 1.0}
     }
 
     Ok(())

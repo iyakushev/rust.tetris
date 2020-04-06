@@ -11,6 +11,15 @@ pub struct Text {
     size: u16
 }
 
+/// Returns a value that was cast to a string filled with leading zeros to match capacity.
+pub fn cast_with_capacity(value: u16, capacity: usize) -> String {
+    let mut string = value.to_string();
+    if string.len() < capacity {
+        string.insert_str(0, &"0".repeat(capacity - string.len()));
+    }
+    string
+}
+
 
 impl Text {
     pub fn new(content: &str, x: u32, y: u32, size: u16, color: Option<sdl2::pixels::Color>) -> Self {
