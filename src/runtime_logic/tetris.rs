@@ -16,11 +16,15 @@ use crate::engine::render::Window;
 
 use super::tetromino::{Rotation, Shape, Tetromino};
 
-const GRAVITY: f32 = 50.0;
-const WHITE: Color = Color::RGBA(255, 255,255,255);
-const H_UI: i32 = 54;
-const SZ_TILE: u32 = 18;
+// CONSTS
+pub const GRAVITY: f32 = 50.0;
+pub const WHITE: Color = Color::RGBA(255, 255,255,255);
+pub const H_UI: i32 = 54;
+pub const SZ_TILE: u32 = 18;
 
+
+//TODO implement DAS
+//TODO allow movement for 1 more TICK
 pub struct Field {
     pieces: Vec<Tetromino>,
     pocket: Option<Tetromino>,
@@ -54,6 +58,12 @@ impl Field {
         self.get_amplifier()
     }
 
+    /// Checks if any tile Y-value is low enough to consider it a game_over
+    pub fn check_lines(&mut self) -> bool {
+
+        self.pieces[self.cursor].get_real_coord().iter().any(|c| c.1 <= 1) // ANY TILE.Y IS TOO HIGH ON THE STACK
+    }
+
     /// Returns new G_AMPLIFIER value
     pub fn get_amplifier(&self) -> f32 {
         match self.level {
@@ -80,7 +90,7 @@ impl Field {
         self.pieces.push(Tetromino::new(rand::random()));
         self.cursor += 1;
         self.pieces[self.cursor].set_default_pos();
-        self.pieces[self.cursor+1].set_for_next();
+        self.pieces[self.cursor + 1].set_for_next();
     }
 
     /// Handles the logic of pocketing a piece
@@ -120,10 +130,21 @@ impl Field {
         match self.pocket {
             Some(t) => t.draw(window).unwrap(),
             None => ()
-        };
+        }
+    }
+
+    /// check pieces for collision
+    pub fn check_collision(&mut self, lb: u32, rb: u32, f: u32) {
+        for cursor in 0..self.pieces.len()-1 {
+            let piece = self.pieces[cursor];
+            if  piece != self.pieces[self.cursor] &&
+                self.pieces[self.cursor].collides_with(Some(piece), lb, rb, f) {
+                    self.current_piece().make_move(-1, 1, lb, rb, f);
+                    break;
+            }
+        }
     }
 }
-
 
 pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Result<(), String> {
     let mut field = Field::new();
@@ -133,12 +154,12 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
     let mut hard_drop = false;
 
     let ui_bottom_offset = (window.height - 54) as i32;
-    let border_left: u32 = SZ_TILE*4-3;
-    let border_right: u32 = window.width - SZ_TILE*4+4;
+    let border_left: u32 = SZ_TILE * 4 - 3;
+    let border_right: u32 = border_left + 10 * SZ_TILE;
     let mut ui = vec!(Text::new("Score:", 10, 10, 15, Some(WHITE)),
                       Text::new("000000", 55, 11, 15, Some(WHITE)),
                       Text::new("Level:", 14, 30, 15, Some(WHITE)),
-                      Text::new("01", 55, 31 , 15, Some(WHITE)),
+                      Text::new("01", 55, 31, 15, Some(WHITE)),
                       Text::new("NEXT:", 165, 10, 15, Some(WHITE)),
                       Text::new("APM:", 15, ui_bottom_offset as u32 + 10, 15, Some(WHITE)),
                       Text::new("000", 55, ui_bottom_offset as u32 + 11, 15, Some(WHITE)),
@@ -153,45 +174,45 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
         window.draw_bg(Color::RGBA(0, 0, 0, 255));
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit {..} |
+                Event::Quit { .. } |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
-                Event::KeyDown { keycode: Some(Keycode::Left), ..} => {
+                Event::KeyDown { keycode: Some(Keycode::Left), .. } => {
                     if !hard_drop {
-                        field.current_piece().make_move(-1, 0);
+                        field.current_piece().make_move(-1, 0, border_left, border_right, ui_bottom_offset as u32);
                     }
                 },
-                Event::KeyDown { keycode: Some(Keycode::Right), ..} => {
+                Event::KeyDown { keycode: Some(Keycode::Right), .. } => {
                     if !hard_drop {
-                        field.current_piece().make_move(1, 0);
+                        field.current_piece().make_move(1, 0, border_left, border_right, ui_bottom_offset as u32);
                     }
                 },
-                Event::KeyDown { keycode: Some(Keycode::Down), ..} => {
+                Event::KeyDown { keycode: Some(Keycode::Down), .. } => {
                     if !accelerated {
-                        g_amplifier = (50.0*g_amplifier)/100.0;
+                        g_amplifier = (50.0 * g_amplifier) / 100.0;
                         accelerated = true;
                     }
                 }
-                Event::KeyUp { keycode: Some(Keycode::Down), ..} => {
+                Event::KeyUp { keycode: Some(Keycode::Down), .. } => {
                     if accelerated {
-                        g_amplifier = (100.0*g_amplifier)/50.0;
+                        g_amplifier = (100.0 * g_amplifier) / 50.0;
                         accelerated = false;
                     }
                 }
-                Event::KeyUp { keycode: Some(Keycode::Up), ..} => {
+                Event::KeyUp { keycode: Some(Keycode::Up), .. } => {
                     if !hard_drop {
                         g_amplifier = 0.0;
                         hard_drop = true;
                     }
                 }
-                Event::KeyDown { keycode: Some(Keycode::E), ..} => {
+                Event::KeyDown { keycode: Some(Keycode::E), .. } => {
                     field.current_piece().rotate(Rotation::Right);
                 },
-                Event::KeyDown { keycode: Some(Keycode::Q), ..} => {
+                Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
                     field.current_piece().rotate(Rotation::Left);
                 }
-                Event::KeyDown { keycode: Some(Keycode::R), ..} => {
+                Event::KeyDown { keycode: Some(Keycode::R), .. } => {
                     field.pocket();
                 }
                 _ => {}
@@ -199,11 +220,11 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
         }
         // DRAW UI OUTLINES
         window.draw_line(WHITE, (0, H_UI), (window.width as i32, H_UI));
-        window.draw_line(WHITE, (145,0), (145, H_UI));
+        window.draw_line(WHITE, (145, 0), (145, H_UI));
         window.draw_line(WHITE, (border_left as i32, ui_bottom_offset), (border_left as i32, H_UI));
-        window.draw_line(WHITE, (border_right as i32,ui_bottom_offset), (border_right as i32, H_UI));
-        window.draw_line(WHITE, (120,ui_bottom_offset), (120, window.height as i32));
-        window.draw_line(WHITE, (170,ui_bottom_offset), (170, window.height as i32));
+        window.draw_line(WHITE, (border_right as i32, ui_bottom_offset), (border_right as i32, H_UI));
+        window.draw_line(WHITE, (120, ui_bottom_offset), (120, window.height as i32));
+        window.draw_line(WHITE, (170, ui_bottom_offset), (170, window.height as i32));
         window.draw_line(WHITE, (0, ui_bottom_offset), (window.width as i32, ui_bottom_offset));
 
         ui[1].change_text(&cast_with_capacity(field.score, 6)); // UPDATE SCORE
@@ -215,15 +236,20 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
         window.present();
         ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 500)); // 1 tick
         if timer >= GRAVITY * g_amplifier {
-            field.current_piece().make_move(0, 1);
+            field.current_piece().make_move(1, 1, border_left, border_right, ui_bottom_offset as u32);
+            field.check_collision(border_left, border_right, ui_bottom_offset as u32);
             if field.current_piece().stops_falling() {
+                if field.game_over() {break 'running;}
                 field.pocketed = false;
                 field.next_piece();
-                if hard_drop { hard_drop = false; g_amplifier = field.get_amplifier();}
+                if hard_drop {
+                    hard_drop = false;
+                    g_amplifier = field.get_amplifier();
+                }
             }
             timer = 0.0;
             field.time += 1;
-        } else {timer += 1.0}
+        } else { timer += 1.0 }
     }
 
     Ok(())

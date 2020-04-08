@@ -17,12 +17,12 @@ macro_rules! rect(
     )
 );
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Shape { I, T, L, J, S, Z, O}
 pub enum Rotation {Right, Left}
 
 impl Shape {
-    ///Returns a corresponding matrix shape of a figure
+    ///Returns a default matrix shape for a given figure
     pub fn matrix(&self) -> [u8; 4] {
         match self {
             Shape::I => [4,5,6,7],    // 0,  1,  2,  3
@@ -64,7 +64,7 @@ impl Distribution<Shape> for Standard {
 }
 
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Tetromino {
     shape: Shape,
     pos_x: u32, // Coordinates with respect to the tile size: 0 -> t_size
@@ -94,7 +94,7 @@ impl Tetromino {
         &self.shape
     }
 
-    // does fixed angle rotation to acknowledge T-spin/wall kicks, save on performance
+    // does a fixed angle rotation to acknowledge T-spin/wall kicks, save on performance
     pub fn rotate(&mut self, r: Rotation) {
         let variations: [[u8;4];4] = match self.shape {
             Shape::I => [[4,5,6,7], [2,6,10,14], [8,9,10,11], [1,5,9,13]],  // 0,  1,  2,  3
@@ -119,7 +119,7 @@ impl Tetromino {
     }
 
     pub fn set_default_pos(&mut self) {
-        self.pos_x = 9;
+        self.pos_x = 8;
         self.pos_y = 0;
         self.r_angle = 0;
         self.m_shape = self.shape.matrix();
@@ -141,23 +141,47 @@ impl Tetromino {
 
     pub fn stops_falling(&self) -> bool { !self.active }
 
-    pub fn make_move(&mut self, direction: i8, axis: u8) {
-        let new_pos = (direction as i32 + self.pos_x as i32) as u32;
-        if new_pos < 4 || new_pos > 12 { // Hardcoded borders
-            ()
-        } else {
-            match axis {
-                0 => self.pos_x = new_pos,
-                1 => {
-                    if self.pos_y < 20 {
-                        self.pos_y += 1
-                    } else {
-                        self.active = false
-                    }
-                },
-                _ => exit(12),
-            }
+    pub fn make_move(&mut self, direction: i8, axis: u8, left_border: u32, right_border: u32, floor: u32) {
+        let prev = (self.pos_x,self.pos_y);
+        match axis {
+            0 => self.pos_x = (direction as i32 + self.pos_x as i32) as u32,
+            1 => self.pos_y = (direction as i32 + self.pos_y as i32) as u32,
+            _ => exit(12),
         }
+        if self.collides_with(None, left_border, right_border, floor) {
+            self.pos_x = prev.0;
+            self.pos_y = prev.1;
+        }
+    }
+
+    pub fn get_real_coord(&self) -> Vec<(u32, u32)> {
+        self.m_shape.iter().map( |t|
+            (self.t_size as u32 * (self.pos_x + (t % 4 * 1) as u32),
+             self.t_size as u32 * (self.pos_y + (t / 4 * 1) as u32))).collect()
+    }
+
+    pub fn collides_with(&mut self, other: Option<Tetromino>, left_border: u32, right_border: u32, floor: u32) -> bool {
+        let coord_s = self.get_real_coord();
+        match other {
+            Some(t) => {
+                let mut coord_o = t.get_real_coord();
+                for tile_s in coord_s {
+                    if tile_s.0 <= left_border || tile_s.0 >= right_border {return true}
+                    else if tile_s.1 >= floor {self.active = false; return true}
+                    for tile_o in coord_o.iter() {
+                        if tile_s.0 == tile_o.0 && tile_s.1 == tile_o.1 {self.active = false; return true}
+                    }
+                }
+            }
+            _ => {
+                for tile_s in coord_s {
+                    if tile_s.0 <= left_border || tile_s.0 >= right_border {return true}
+                    else if tile_s.1 >= floor {self.active = false; return true}
+                }
+            }
+        };
+
+        false
     }
 
     pub fn draw(&self, window: &mut Window) -> Result<(), String> {

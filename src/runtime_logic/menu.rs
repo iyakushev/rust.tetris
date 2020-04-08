@@ -1,16 +1,20 @@
-use sdl2::pixels::Color;
-use sdl2::keyboard::Keycode;
-use sdl2::event::Event;
-use sdl2::rect::Rect;
 use std::time::Duration;
+
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+
 use crate::engine::{render, text::Text};
+
 use super::tetris;
 
 //Todo scale interface
     // |-> Todo settings .ini
 //Todo sounds
 //Todo background animation
-//Todo text animation
+//Todo name
+//Todo highscore save
 
 macro_rules! rect(
     ($x:expr, $y:expr, $w:expr, $h:expr) => (
