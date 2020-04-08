@@ -141,11 +141,11 @@ impl Tetromino {
 
     pub fn stops_falling(&self) -> bool { !self.active }
 
-    pub fn make_move(&mut self, direction: i8, axis: u8, left_border: u32, right_border: u32, floor: u32) {
+    pub fn make_move(&mut self, steps: i32, direction: i8, axis: u8, left_border: u32, right_border: u32, floor: u32) {
         let prev = (self.pos_x,self.pos_y);
         match axis {
-            0 => self.pos_x = (direction as i32 + self.pos_x as i32) as u32,
-            1 => self.pos_y = (direction as i32 + self.pos_y as i32) as u32,
+            0 => self.pos_x = (steps*direction as i32 + self.pos_x as i32) as u32,
+            1 => self.pos_y = (steps*direction as i32 + self.pos_y as i32) as u32,
             _ => exit(12),
         }
         if self.collides_with(None, left_border, right_border, floor) {
@@ -185,12 +185,14 @@ impl Tetromino {
     }
 
     pub fn draw(&self, window: &mut Window) -> Result<(), String> {
-        for offset in self.m_shape.iter() {
-            let x = self.pos_x + (offset%4*1) as u32;
-            let y = self.pos_y + (offset/4*1) as u32;
-            window.load_texture(Path::new("data/art/tiles.png"),
-                                rect!(self.color_offset, 0, self.t_size, self.t_size),
-                                rect!(x * self.t_size as u32, y * self.t_size as u32, self.t_size, self.t_size))?;
+        for tile in self.m_shape.iter() {
+            let x = self.pos_x + (tile%4*1) as u32;
+            let y = self.pos_y + (tile/4*1) as u32;
+            if y > 2 {
+                window.load_texture(Path::new("data/art/tiles.png"),
+                                    rect!(self.color_offset, 0, self.t_size, self.t_size),
+                                    rect!(x * self.t_size as u32, y * self.t_size as u32, self.t_size, self.t_size))?;
+            }
         }
         Ok(())
     }

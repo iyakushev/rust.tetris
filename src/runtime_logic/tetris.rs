@@ -25,6 +25,10 @@ pub const SZ_TILE: u32 = 18;
 
 //TODO implement DAS
 //TODO allow movement for 1 more TICK
+//TODO implement multiple scoring
+//TODO don't draw on top of a ui
+//TODO refactor collision
+
 pub struct Field {
     pieces: Vec<Tetromino>,
     pocket: Option<Tetromino>,
@@ -52,6 +56,16 @@ impl Field {
         }
     }
 
+    /// Modifies the score where n is a number of rows deleted
+    pub fn inc_score(&mut self, n: u16) {
+        self.score = match n {
+            1 => 40*(self.level + 1) as u16,
+            2 => 100*(self.level + 1)as u16,
+            3 => 300*(self.level + 1)as u16,
+            _ => 1200*(self.level + 1)as u16,
+        };
+    }
+
     /// Changes level and returns new G_AMPLIFIER value
     pub fn next_lvl(&mut self) -> f32 {
         self.level += 1;
@@ -59,24 +73,27 @@ impl Field {
     }
 
     /// Checks if any tile Y-value is low enough to consider it a game_over
-    pub fn check_lines(&mut self) -> bool {
-
+    pub fn game_over(&mut self) -> bool {
         self.pieces[self.cursor].get_real_coord().iter().any(|c| c.1 <= 1) // ANY TILE.Y IS TOO HIGH ON THE STACK
+    }
+
+    fn move_down(&mut self, n: u16, lb: u32, rb: u32, f: u32) {
+        self.pieces.iter_mut().for_each(|p| p.make_move(n as i32, 1, 1, lb, rb, f));
     }
 
     /// Returns new G_AMPLIFIER value
     pub fn get_amplifier(&self) -> f32 {
         match self.level {
-            1 => 1.0,
-            2 => 0.9,
-            3 => 0.8,
-            4 => 0.7,
-            5 => 0.6,
-            6 => 0.5,
-            7 => 0.4,
-            8 => 0.3,
-            9 => 0.2,
-            _ => 0.1,
+            1 => 1.0,  // G = 50 ticks
+            2 => 0.9,  // G = 45 ticks
+            3 => 0.8,  // G = 40 ticks
+            4 => 0.7,  // G = 35 ticks
+            5 => 0.6,  // G = 30 ticks
+            6 => 0.5,  // G = 25 ticks
+            7 => 0.4,  // G = 20 ticks
+            8 => 0.3,  // G = 15 ticks
+            9 => 0.2,  // G = 10 ticks
+            _ => 0.1,  // G =  5 ticks
         }
     }
 
@@ -139,7 +156,7 @@ impl Field {
             let piece = self.pieces[cursor];
             if  piece != self.pieces[self.cursor] &&
                 self.pieces[self.cursor].collides_with(Some(piece), lb, rb, f) {
-                    self.current_piece().make_move(-1, 1, lb, rb, f);
+                    self.current_piece().make_move(1, -1, 1, lb, rb, f);
                     break;
             }
         }
@@ -180,23 +197,25 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
                 },
                 Event::KeyDown { keycode: Some(Keycode::Left), .. } => {
                     if !hard_drop {
-                        field.current_piece().make_move(-1, 0, border_left, border_right, ui_bottom_offset as u32);
+                        field.current_piece().make_move(1, -1, 0, border_left, border_right, ui_bottom_offset as u32);
+                        field.check_collision(border_left, border_right, ui_bottom_offset as u32);
                     }
                 },
                 Event::KeyDown { keycode: Some(Keycode::Right), .. } => {
                     if !hard_drop {
-                        field.current_piece().make_move(1, 0, border_left, border_right, ui_bottom_offset as u32);
+                        field.current_piece().make_move(1, 1, 0, border_left, border_right, ui_bottom_offset as u32);
+                        field.check_collision(border_left, border_right, ui_bottom_offset as u32);
                     }
                 },
                 Event::KeyDown { keycode: Some(Keycode::Down), .. } => {
                     if !accelerated {
-                        g_amplifier = (50.0 * g_amplifier) / 100.0;
+                        g_amplifier = (10.0 * g_amplifier) / 100.0;
                         accelerated = true;
                     }
                 }
                 Event::KeyUp { keycode: Some(Keycode::Down), .. } => {
                     if accelerated {
-                        g_amplifier = (100.0 * g_amplifier) / 50.0;
+                        g_amplifier = (100.0 * g_amplifier) / 10.0;
                         accelerated = false;
                     }
                 }
@@ -236,7 +255,7 @@ pub fn run(window: &mut render::Window, event_pump: &mut sdl2::EventPump) -> Res
         window.present();
         ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 500)); // 1 tick
         if timer >= GRAVITY * g_amplifier {
-            field.current_piece().make_move(1, 1, border_left, border_right, ui_bottom_offset as u32);
+            field.current_piece().make_move(1, 1, 1, border_left, border_right, ui_bottom_offset as u32);
             field.check_collision(border_left, border_right, ui_bottom_offset as u32);
             if field.current_piece().stops_falling() {
                 if field.game_over() {break 'running;}
