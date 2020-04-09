@@ -73,6 +73,7 @@ pub struct Tetromino {
     m_shape: [u8; 4],
     r_angle: usize,
     color_offset: u8,
+    on_hold: bool,
     active: bool
 }
 
@@ -82,10 +83,11 @@ impl Tetromino {
             r_angle: 0,
             m_shape: shape.matrix(),
             color_offset: shape.texture_offset(),
-            shape: shape,
+            shape,
             pos_x: 10,
             pos_y: 0,
             t_size: 18,
+            on_hold: false,
             active: true
         }
     }
@@ -94,8 +96,12 @@ impl Tetromino {
         &self.shape
     }
 
+    pub fn is_active(&self) -> bool {self.active}
+
+    pub fn deactivate(&mut self) {self.active = false}
+
     // does a fixed angle rotation to acknowledge T-spin/wall kicks, save on performance
-    pub fn rotate(&mut self, r: Rotation) {
+    pub fn rotate(&mut self, r: Rotation, lb: u32, rb: u32, f: u32) {
         let variations: [[u8;4];4] = match self.shape {
             Shape::I => [[4,5,6,7], [2,6,10,14], [8,9,10,11], [1,5,9,13]],  // 0,  1,  2,  3
             Shape::J => [[0,4,5,6], [1,2,5,9], [4,5,6,10], [1,5,8,9]],      // 4,  5,  6,  7
@@ -116,12 +122,18 @@ impl Tetromino {
             }
         }
         self.m_shape = variations[self.r_angle];
+        while self.collides_with_frame(lb, rb, f) {
+            if self.pos_x <= 9 // approximate middle
+                 {self.pos_x += 1}
+            else {self.pos_x -= 1}
+        }
     }
 
     pub fn set_default_pos(&mut self) {
         self.pos_x = 8;
         self.pos_y = 0;
         self.r_angle = 0;
+        self.on_hold = false;
         self.m_shape = self.shape.matrix();
     }
 
@@ -129,17 +141,16 @@ impl Tetromino {
         self.pos_x = 12;
         self.pos_y = 0;
         self.r_angle = 0;
+        self.on_hold = true;
         self.m_shape = self.shape.matrix();
     }
 
     pub fn set_to_pocket(&mut self) {
-        self.pos_x = 14;
+        self.pos_x = 13;
         self.pos_y = 24;
         self.r_angle = 0;
         self.m_shape = self.shape.matrix();
     }
-
-    pub fn stops_falling(&self) -> bool { !self.active }
 
     pub fn make_move(&mut self, steps: i32, direction: i8, axis: u8, left_border: u32, right_border: u32, floor: u32) {
         let prev = (self.pos_x,self.pos_y);
@@ -148,39 +159,24 @@ impl Tetromino {
             1 => self.pos_y = (steps*direction as i32 + self.pos_y as i32) as u32,
             _ => exit(12),
         }
-        if self.collides_with(None, left_border, right_border, floor) {
+        if self.collides_with_frame(left_border, right_border, floor) {
             self.pos_x = prev.0;
             self.pos_y = prev.1;
         }
     }
 
-    pub fn get_real_coord(&self) -> Vec<(u32, u32)> {
+    pub fn get_tiles_pos(&self) -> Vec<(u32, u32)> {
         self.m_shape.iter().map( |t|
             (self.t_size as u32 * (self.pos_x + (t % 4 * 1) as u32),
              self.t_size as u32 * (self.pos_y + (t / 4 * 1) as u32))).collect()
     }
 
-    pub fn collides_with(&mut self, other: Option<Tetromino>, left_border: u32, right_border: u32, floor: u32) -> bool {
-        let coord_s = self.get_real_coord();
-        match other {
-            Some(t) => {
-                let mut coord_o = t.get_real_coord();
-                for tile_s in coord_s {
-                    if tile_s.0 <= left_border || tile_s.0 >= right_border {return true}
-                    else if tile_s.1 >= floor {self.active = false; return true}
-                    for tile_o in coord_o.iter() {
-                        if tile_s.0 == tile_o.0 && tile_s.1 == tile_o.1 {self.active = false; return true}
-                    }
-                }
-            }
-            _ => {
-                for tile_s in coord_s {
-                    if tile_s.0 <= left_border || tile_s.0 >= right_border {return true}
-                    else if tile_s.1 >= floor {self.active = false; return true}
-                }
-            }
-        };
-
+    pub fn collides_with_frame(&mut self, left_border: u32, right_border: u32, floor: u32) -> bool {
+        let coord_s = self.get_tiles_pos();
+        for tile_s in coord_s {
+            if tile_s.0 <= left_border || tile_s.0 >= right_border {return true}
+            else if tile_s.1 >= floor {self.active = false; return true}
+        }
         false
     }
 
@@ -188,7 +184,7 @@ impl Tetromino {
         for tile in self.m_shape.iter() {
             let x = self.pos_x + (tile%4*1) as u32;
             let y = self.pos_y + (tile/4*1) as u32;
-            if y > 2 {
+            if y > 2 || self.on_hold {
                 window.load_texture(Path::new("data/art/tiles.png"),
                                     rect!(self.color_offset, 0, self.t_size, self.t_size),
                                     rect!(x * self.t_size as u32, y * self.t_size as u32, self.t_size, self.t_size))?;
