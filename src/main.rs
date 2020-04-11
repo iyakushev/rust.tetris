@@ -1,9 +1,9 @@
-mod engine;
-mod runtime_logic;
+use sdl2::pixels::Color;
 
 use runtime_logic::menu;
-use engine::{render,text::Text};
-use sdl2::pixels::Color;
+
+mod engine;
+mod runtime_logic;
 
 fn main() -> Result<(), String> {
     menu::run();

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::process::exit;
 
@@ -10,6 +11,7 @@ use crate::engine::render::Window;
 //Todo background animation
 //Todo ghosting/shadow
 //Todo APM
+//TODO Wall-kicks for rotation
 
 macro_rules! rect(
     ($x:expr, $y:expr, $w:expr, $h:expr) => (
@@ -51,7 +53,7 @@ impl Shape {
 
 impl Distribution<Shape> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Shape {
-        match rng.gen_range(0, 6) {
+        match rng.gen_range(0, 7) {
             0 => Shape::I,
             1 => Shape::T,
             2 => Shape::L,
@@ -69,8 +71,9 @@ pub struct Tetromino {
     shape: Shape,
     pos_x: u32, // Coordinates with respect to the tile size: 0 -> t_size
     pos_y: u32, // Coordinates with respect to the tile size: 0 -> t_size
-    t_size: u8,
+    t_size: u32,
     m_shape: [u8; 4],
+    tiles: [(u32,u32);4],
     r_angle: usize,
     color_offset: u8,
     on_hold: bool,
@@ -79,17 +82,20 @@ pub struct Tetromino {
 
 impl Tetromino {
     pub fn new(shape: Shape) -> Self {
-        Tetromino {
+        let mut t = Tetromino {
             r_angle: 0,
             m_shape: shape.matrix(),
             color_offset: shape.texture_offset(),
             shape,
+            tiles: [(0,0);4],
             pos_x: 10,
             pos_y: 0,
             t_size: 18,
             on_hold: false,
             active: true
-        }
+        };
+        t.mut_tiles_pos();
+        t
     }
 
     pub fn id(&self) -> &Shape {
@@ -101,7 +107,7 @@ impl Tetromino {
     pub fn deactivate(&mut self) {self.active = false}
 
     // does a fixed angle rotation to acknowledge T-spin/wall kicks, save on performance
-    pub fn rotate(&mut self, r: Rotation, lb: u32, rb: u32, f: u32) {
+    pub fn rotate(&mut self, r: Rotation, all_tiles: &HashSet<(u32,u32)>, lb: u32, rb: u32, f: u32) {
         let variations: [[u8;4];4] = match self.shape {
             Shape::I => [[4,5,6,7], [2,6,10,14], [8,9,10,11], [1,5,9,13]],  // 0,  1,  2,  3
             Shape::J => [[0,4,5,6], [1,2,5,9], [4,5,6,10], [1,5,8,9]],      // 4,  5,  6,  7
@@ -111,6 +117,7 @@ impl Tetromino {
             Shape::Z => [[0,1,5,6], [2,5,6,9], [4,5,9,10], [1,4,5,8]],
             Shape::T => [[1,4,5,6], [1,5,6,9], [4,5,6,9], [1,4,5,9]],
         };
+        let prev_angle = self.r_angle;
         match r {
             Rotation::Right => {
                 if self.r_angle < 3 {self.r_angle += 1}
@@ -122,11 +129,41 @@ impl Tetromino {
             }
         }
         self.m_shape = variations[self.r_angle];
+        self.mut_tiles_pos();
+        let org_x = self.pos_x;
+
+        // EDGE CASE FOR ROTATION
         while self.collides_with_frame(lb, rb, f) {
-            if self.pos_x <= 9 // approximate middle
+            if self.tiles.iter().any(|t| all_tiles.contains(t)) {
+                self.pos_x = org_x;
+                self.r_angle = prev_angle;
+                self.m_shape = variations[self.r_angle];
+                return ();
+            }
+            else if self.pos_x<=9 // approximate middle
                  {self.pos_x += 1}
             else {self.pos_x -= 1}
         }
+        self.mut_tiles_pos();
+        if self.tiles.iter().any(|t| all_tiles.contains(t)) {
+            let mut columns = 0;
+            let mut pos_y = 0;
+            for tile in self.tiles.iter() {
+                if all_tiles.contains(tile) && columns < 2 {
+                    if pos_y != tile.1 {
+                        columns += 1;
+                        pos_y = tile.1;
+                    }
+                } else {
+                    self.pos_x = org_x;
+                    self.r_angle = prev_angle;
+                    self.m_shape = variations[self.r_angle];
+                    return ();
+                }
+            }
+        }
+
+
     }
 
     pub fn set_default_pos(&mut self) {
@@ -152,28 +189,44 @@ impl Tetromino {
         self.m_shape = self.shape.matrix();
     }
 
-    pub fn make_move(&mut self, steps: i32, direction: i8, axis: u8, left_border: u32, right_border: u32, floor: u32) {
+    pub fn make_move(&mut self, steps: i32, direction: i32, axis: u8, left_border: u32, right_border: u32, floor: u32) {
         let prev = (self.pos_x,self.pos_y);
         match axis {
-            0 => self.pos_x = (steps*direction as i32 + self.pos_x as i32) as u32,
-            1 => self.pos_y = (steps*direction as i32 + self.pos_y as i32) as u32,
+            0 => self.pos_x = (steps*direction + self.pos_x as i32) as u32,
+            1 => self.pos_y = (steps*direction + self.pos_y as i32) as u32,
             _ => exit(12),
         }
+        self.mut_tiles_pos();
         if self.collides_with_frame(left_border, right_border, floor) {
             self.pos_x = prev.0;
             self.pos_y = prev.1;
         }
+        self.mut_tiles_pos();
     }
 
-    pub fn get_tiles_pos(&self) -> Vec<(u32, u32)> {
-        self.m_shape.iter().map( |t|
-            (self.t_size as u32 * (self.pos_x + (t % 4 * 1) as u32),
-             self.t_size as u32 * (self.pos_y + (t / 4 * 1) as u32))).collect()
+    pub fn delete_tile(&mut self, t_pos: (u32,u32)) {
+        let v = self.tiles.iter().position(|&t| t == t_pos);
+        for idx in v {
+            self.tiles[idx]   = (0,0);
+            self.m_shape[idx] = 0;
+        }
+    }
+
+
+    pub fn mut_tiles_pos(&mut self) {
+        for (i,t) in self.m_shape.iter().enumerate() {
+            self.tiles[i].0 = self.t_size * (self.pos_x + (t % 4 * 1) as u32);
+            self.tiles[i].1 = self.t_size * (self.pos_y + (t / 4 * 1) as u32);
+        }
+    }
+
+    pub fn get_tiles_pos(&self) -> [(u32, u32);4] {
+        self.tiles
     }
 
     pub fn collides_with_frame(&mut self, left_border: u32, right_border: u32, floor: u32) -> bool {
-        let coord_s = self.get_tiles_pos();
-        for tile_s in coord_s {
+        let coord_s = self.tiles;
+        for tile_s in coord_s.iter() {
             if tile_s.0 <= left_border || tile_s.0 >= right_border {return true}
             else if tile_s.1 >= floor {self.active = false; return true}
         }
@@ -187,7 +240,7 @@ impl Tetromino {
             if y > 2 || self.on_hold {
                 window.load_texture(Path::new("data/art/tiles.png"),
                                     rect!(self.color_offset, 0, self.t_size, self.t_size),
-                                    rect!(x * self.t_size as u32, y * self.t_size as u32, self.t_size, self.t_size))?;
+                                    rect!(x * self.t_size, y * self.t_size, self.t_size, self.t_size))?;
             }
         }
         Ok(())

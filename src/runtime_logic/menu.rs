@@ -30,7 +30,7 @@ pub fn save_name(text: &str, pos_x: u32, pos_y: u32) {
 pub fn run() -> Result<(), String>{
     let mut window = render::Window::new(320, 480);
     let mut menu_text = vec!(
-                            Text::new("Tetris!", 10, 20, 100, None),
+                            Text::new("Rust.Tetris!", 10, 20, 100, None),
                             Text::new("New game", 70, 150, 40, None),
                             Text::new("High score", 70, 200, 40, None),
                             Text::new("Settings", 70, 250, 40, None),

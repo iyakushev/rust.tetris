@@ -4,7 +4,6 @@ use sdl2::{
     keyboard::Keycode,
     pixels::Color,
     rect::Rect,
-    timer::Timer,
 };
 
 use crate::engine::{render::Window, text::cast_with_capacity, text::Text};
@@ -15,8 +14,6 @@ use super::tetromino::Rotation;
 //TODO GAMEOVER SCREEN
 //TODO JOYSTICK
 //TODO GAME SETTINGS BEFORE START
-//TODO ROTATION COLLISION
-
 
 // CONSTS
 pub const GRAVITY: f32 = 50.0;
@@ -27,29 +24,10 @@ pub const W_FIELD: usize = 10;
 pub const H_FIELD: usize = 20;
 
 
-fn check_rotation_collision(field: &mut Field, direction: Rotation, bl: u32, br: u32, f: u32) {
-    if field.has_collision() {
-        // CHECK IF ROTATION IS EVEN POSSIBLE
-        let mut columns = 0;
-        let mut pos_y = 0;
-        for tile in field.current_piece().get_tiles_pos().iter() {
-            if field.tiles.contains(tile) && columns < 2 {
-                if pos_y != tile.1 {columns+=1; pos_y = tile.1;}
-            } else {
-                println!("HOLD ON {}", columns);
-                match direction {
-                    Rotation::Right => field.current_piece().rotate(Rotation::Left, bl, br, f),
-                    Rotation::Left => field.current_piece().rotate(Rotation::Right, bl, br, f),
-                }
-            }
-        }
-    }
-}
-
-
 pub fn run(window: &mut Window, event_pump: &mut sdl2::EventPump) -> Result<(), String> {
     let mut field = Field::new(W_FIELD, H_FIELD);
     let mut ticks = 0;
+    let mut lines = 0;
     let mut g_amplifier = 1.0; // The less it becomes -- the faster pieces will fall
     let mut accelerated = false;
     let mut hard_drop = false;
@@ -110,18 +88,10 @@ pub fn run(window: &mut Window, event_pump: &mut sdl2::EventPump) -> Result<(), 
                     }
                 }
                 Event::KeyDown { keycode: Some(Keycode::E), .. } => {
-                    field.current_piece().rotate(Rotation::Right,
-                                                 border_left,
-                                                 border_right,
-                                                 ui_bottom_offset as u32);
-                    check_rotation_collision(&mut field, Rotation::Left, border_left, border_right, ui_bottom_offset as u32);
+                    field.rotate(Rotation::Right, border_left, border_right, ui_bottom_offset as u32);
                 },
                 Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
-                    field.current_piece().rotate(Rotation::Left,
-                                                 border_left,
-                                                 border_right,
-                                                 ui_bottom_offset as u32);
-                    check_rotation_collision(&mut field, Rotation::Left, border_left, border_right, ui_bottom_offset as u32);
+                    field.rotate(Rotation::Left, border_left, border_right, ui_bottom_offset as u32);
                 }
                 Event::KeyDown { keycode: Some(Keycode::R), .. } => {
                     field.pocket();
@@ -153,10 +123,13 @@ pub fn run(window: &mut Window, event_pump: &mut sdl2::EventPump) -> Result<(), 
                 field.current_piece().deactivate();
             }
             if !field.current_piece().is_active() {
+                field.check_lines(1, border_left, border_right, ui_bottom_offset as u32);
                 if field.game_over() {break 'running;}
 
                 ui[1].change_text(&cast_with_capacity(field.score, 6)); // UPDATE SCORE
                 ui[3].change_text(&cast_with_capacity(field.level as u16, 2)); // UPDATE LEVEL
+
+                window.set_title(&format!("NAME_HERE; Lines: {}", lines));
 
                 field.pocketed = false;
                 field.next_piece();

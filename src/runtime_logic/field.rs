@@ -1,11 +1,9 @@
 use std::collections::HashSet;
-use std::path::Path;
-use std::process::exit;
 use std::time::Instant;
 
 use crate::engine::render::Window;
 
-use super::tetromino::{Rotation, Shape, Tetromino};
+use super::tetromino::{Rotation, Tetromino};
 
 //TODO implement multiple scoring rules
 
@@ -67,14 +65,34 @@ impl Field {
         self.pieces.iter_mut().for_each(|p| p.make_move(n as i32, 1, 1, lb, rb, f));
     }
 
+    pub fn rotate(&mut self, direction: Rotation, lb: u32, rb: u32, f: u32) {
+        self.pieces[self.cursor].rotate(direction, &self.tiles, lb, rb, f);
+    }
 
-    pub fn check_lines(&mut self) {
+    fn clear_rows(&mut self, to_remove: Vec::<u32>) {
+        to_remove.iter().for_each(|e| self.tiles.retain(|t| t.1 != *e)); // remove from hash set
+        for p in &mut self.pieces {
+            p.get_tiles_pos().iter_mut()
+                .filter(|t| to_remove.contains(&t.1))
+                .for_each(|t| p.delete_tile(*t));
+        }
+        self.pieces.retain(|p| !p.get_tiles_pos().iter().all(|&t| t == (0, 0)));
+    }
+
+    pub fn check_lines(&mut self, n: u16, lb: u32, rb: u32, f: u32) {
         let pos = self.pieces[self.cursor].get_tiles_pos();
-        for tile in pos {
+        let mut to_remove = Vec::new();
+        for tile in pos.iter() {
             if self.tiles.iter().map(|t| t.1 == tile.1).count() == self.width {
-                ()
+                let present = to_remove.contains(&tile.1);
+                if present {
+                    to_remove.push(tile.1);
+                }
             }
         }
+
+        self.clear_rows(to_remove);
+        // self.lower_pieces(n: u16, lb: u32, rb: u32, f: u32)
     }
 
     /// Returns new G_AMPLIFIER value

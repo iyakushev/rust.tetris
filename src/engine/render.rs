@@ -77,6 +77,12 @@ impl Window {
         self.canvas.set_draw_color(clr);
     }
 
+    pub fn set_title(&mut self, title: &str) {
+        let window = self.canvas.window_mut();
+
+        window.set_title(&title).map_err(|e| e.to_string()).unwrap();
+    }
+
     pub fn draw_line(&mut self, color: Color, start: (i32,i32), finish: (i32,i32)) -> Result<(), String> {
         self.canvas.set_draw_color(color);
         self.canvas.draw_line(start, finish)?;
