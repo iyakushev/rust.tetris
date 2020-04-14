@@ -1,16 +1,18 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::time::Instant;
 
 use crate::engine::render::Window;
 
-use super::tetromino::{Rotation, Tetromino};
+use super::tetromino::{draw_fn, Rotation, Tetromino};
 
 //TODO implement multiple scoring rules
 
 pub struct Field {
-    pub tiles: HashSet<(u32,u32)>,
-    pieces: Vec<Tetromino>,
+    pub tiles: HashMap<(u32,u32), u32>,
     pocket: Option<Tetromino>,
+    current: Tetromino,
+    next: Tetromino,
     cursor: usize,
     width: usize,
     height: usize,
@@ -23,12 +25,14 @@ pub struct Field {
 impl Field {
     /// Creates a new instance
     pub fn new(width: usize, height: usize) -> Self {
-        let mut v = vec![Tetromino::new(rand::random()), Tetromino::new(rand::random())];
-        v[0].set_default_pos();
-        v[1].set_for_next();
+        let mut current = Tetromino::new(rand::random());
+        let mut next = Tetromino::new(rand::random());
+        current.set_default_pos();
+        next.set_for_next();
         Field {
-            tiles: HashSet::new(),
-            pieces: v,
+            tiles: HashMap::new(),
+            current,
+            next,
             width,
             height,
             pocket: None,
@@ -58,32 +62,22 @@ impl Field {
 
     /// Checks if any tile Y-value is low enough to consider it a game_over
     pub fn game_over(&mut self) -> bool {
-        self.pieces[self.cursor].get_tiles_pos().iter().any(|c| c.1 <= 1) // ANY TILE.Y IS TOO HIGH ON THE STACK
+        self.current.get_tiles_pos().iter().any(|c| c.1 <= 1) // ANY TILE.Y IS TOO HIGH ON THE STACK
     }
 
-    fn lower_pieces(&mut self, n: u16, lb: u32, rb: u32, f: u32) {
-        self.pieces.iter_mut().for_each(|p| p.make_move(n as i32, 1, 1, lb, rb, f));
-    }
+    // fn lower_pieces(&mut self, n: u16, lb: u32, rb: u32, f: u32) {
+    //     self.pieces.iter_mut().for_each(|p| p.make_move(n as i32, 1, 1, lb, rb, f));
+    // }
 
     pub fn rotate(&mut self, direction: Rotation, lb: u32, rb: u32, f: u32) {
-        self.pieces[self.cursor].rotate(direction, &self.tiles, lb, rb, f);
-    }
-
-    fn clear_rows(&mut self, to_remove: Vec::<u32>) {
-        to_remove.iter().for_each(|e| self.tiles.retain(|t| t.1 != *e)); // remove from hash set
-        for p in &mut self.pieces {
-            p.get_tiles_pos().iter_mut()
-                .filter(|t| to_remove.contains(&t.1))
-                .for_each(|t| p.delete_tile(*t));
-        }
-        self.pieces.retain(|p| !p.get_tiles_pos().iter().all(|&t| t == (0, 0)));
+        self.current.rotate(direction, &self.tiles, lb, rb, f);
     }
 
     pub fn check_lines(&mut self, n: u16, lb: u32, rb: u32, f: u32) {
-        let pos = self.pieces[self.cursor].get_tiles_pos();
+        let pos = self.current.get_tiles_pos();
         let mut to_remove = Vec::new();
         for tile in pos.iter() {
-            if self.tiles.iter().map(|t| t.1 == tile.1).count() == self.width {
+            if self.tiles.iter().map(|t| *t.1 == tile.1).count() == self.width {
                 let present = to_remove.contains(&tile.1);
                 if present {
                     to_remove.push(tile.1);
@@ -91,7 +85,7 @@ impl Field {
             }
         }
 
-        self.clear_rows(to_remove);
+        to_remove.iter().for_each(|e| self.tiles.retain(|t, _| t.1 != *e)); // remove from hash set
         // self.lower_pieces(n: u16, lb: u32, rb: u32, f: u32)
     }
 
@@ -113,46 +107,36 @@ impl Field {
 
     /// Returns a ref to the current piece
     pub fn current_piece(&mut self) -> &mut Tetromino {
-        &mut self.pieces[self.cursor]
+        &mut self.current
     }
 
     /// Handles spawning of the new piece
     pub fn next_piece(&mut self) {
-
-        self.current_piece().get_tiles_pos().iter().for_each(|c| {self.tiles.insert(*c);});
-
-        self.pieces.push(Tetromino::new(rand::random()));
+        let shape = self.current.get_shape();
+        self.current.get_tiles_pos().iter().for_each(|c| {self.tiles.insert(*c, shape.texture_offset() as u32);});
+        self.current = self.next;
+        self.next = Tetromino::new(rand::random());
         self.cursor += 1;
-        self.pieces[self.cursor].set_default_pos();
-        self.pieces[self.cursor + 1].set_for_next();
+        self.current.set_default_pos();
+        self.next.set_for_next();
     }
 
     /// Handles the logic of pocketing a piece
     pub fn pocket(&mut self) {
         if !self.pocketed {
             if self.pocket.is_some() {
-                let next = self.pieces.pop().unwrap();
-                let mut new = self.pieces.pop().unwrap();
-                let mut piece = self.pocket.unwrap();
-
-                piece.set_default_pos();
-                new.set_to_pocket(); //Change pos
-
-                self.pieces.push(piece);
-                self.pieces.push(next);
-                self.pocket = Some(new);
+                let mut pocket = self.pocket.unwrap();
+                pocket.set_default_pos();
+                self.current.set_to_pocket();
+                self.pocket = Some(self.current);
+                self.current = pocket;
             } else {
-                let mut cur = self.pieces.pop().unwrap();
-                let mut new = Tetromino::new(rand::random());
-                let mut poc = self.pieces.pop().unwrap(); // Store
-
-                new.set_for_next();
-                cur.set_default_pos();
-                poc.set_to_pocket();
-
-                self.pieces.push(cur);           // Swap new CURRENT
-                self.pieces.push(new);           // Set new NEXT
-                self.pocket = Some(poc);         // Set new POCKET
+                self.current.set_to_pocket();
+                self.pocket = Some(self.current);
+                self.current = self.next;
+                self.current.set_default_pos();
+                self.next = Tetromino::new(rand::random());
+                self.next.set_for_next();
             }
             self.pocketed = true;
         }
@@ -160,7 +144,11 @@ impl Field {
 
     /// Draws pieces on the screen
     pub fn draw(&mut self, window: &mut Window) {
-        self.pieces.iter().for_each(|t| t.draw(window).unwrap());
+        self.tiles.iter().for_each(|kv| {
+            draw_fn(window, *kv.0, *kv.1, 18);
+        });
+        self.next.draw(window).unwrap();
+        self.current.draw(window).unwrap();
         match self.pocket {
             Some(t) => t.draw(window).unwrap(),
             None => ()
@@ -169,6 +157,6 @@ impl Field {
 
     /// check pieces for collision
     pub fn has_collision(&mut self) -> bool {
-        self.current_piece().get_tiles_pos().iter().any(|c| self.tiles.contains(c))
+        self.current_piece().get_tiles_pos().iter().any(|c| self.tiles.contains_key(c))
     }
 }

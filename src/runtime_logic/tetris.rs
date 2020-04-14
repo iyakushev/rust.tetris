@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use rand::{distributions::{Distribution, Standard}, Rng};
 use sdl2::{
     event::Event,
@@ -112,7 +114,7 @@ pub fn run(window: &mut Window, event_pump: &mut sdl2::EventPump) -> Result<(), 
         field.draw(window);        // DRAW PIECES
 
         window.present();          // PRESENT BUFFER TO THE SCREEN
-        ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 500)); // 1 tick
+        // ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 500)); // 1 tick
 
         // ON PIECE UPDATE
         if ticks >= (GRAVITY * g_amplifier) as u32 {
@@ -123,13 +125,13 @@ pub fn run(window: &mut Window, event_pump: &mut sdl2::EventPump) -> Result<(), 
                 field.current_piece().deactivate();
             }
             if !field.current_piece().is_active() {
-                field.check_lines(1, border_left, border_right, ui_bottom_offset as u32);
+                // field.check_lines(1, border_left, border_right, ui_bottom_offset as u32);
                 if field.game_over() {break 'running;}
 
                 ui[1].change_text(&cast_with_capacity(field.score, 6)); // UPDATE SCORE
                 ui[3].change_text(&cast_with_capacity(field.level as u16, 2)); // UPDATE LEVEL
 
-                window.set_title(&format!("NAME_HERE; Lines: {}", lines));
+                window.set_title(&format!("NAME_HERE; Lines: {}; FPS: {}", lines, 11));
 
                 field.pocketed = false;
                 field.next_piece();
@@ -140,6 +142,7 @@ pub fn run(window: &mut Window, event_pump: &mut sdl2::EventPump) -> Result<(), 
 
             }
             ticks = 0;
+
         }
         else { ticks += 1 }
     }

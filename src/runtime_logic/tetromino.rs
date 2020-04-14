@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::exit;
 
@@ -18,6 +18,16 @@ macro_rules! rect(
         Some(Rect::new($x as i32, $y as i32, $w as u32, $h as u32))
     )
 );
+
+
+pub fn draw_fn(window: &mut Window, pos: (u32,u32), offset: u32, t_size: u32) -> Result<(), String>{
+    window.load_texture(Path::new("data/art/tiles.png"),
+                        rect!(offset, 0, t_size, t_size),
+                        rect!(pos.0, pos.1, t_size, t_size))?;
+    Ok(())
+}
+
+
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Shape { I, T, L, J, S, Z, O}
@@ -106,8 +116,12 @@ impl Tetromino {
 
     pub fn deactivate(&mut self) {self.active = false}
 
+    pub fn get_shape(&self) -> Shape {
+        self.shape
+    }
+
     // does a fixed angle rotation to acknowledge T-spin/wall kicks, save on performance
-    pub fn rotate(&mut self, r: Rotation, all_tiles: &HashSet<(u32,u32)>, lb: u32, rb: u32, f: u32) {
+    pub fn rotate(&mut self, r: Rotation, all_tiles: &HashMap<(u32,u32), u32>, lb: u32, rb: u32, f: u32) {
         let variations: [[u8;4];4] = match self.shape {
             Shape::I => [[4,5,6,7], [2,6,10,14], [8,9,10,11], [1,5,9,13]],  // 0,  1,  2,  3
             Shape::J => [[0,4,5,6], [1,2,5,9], [4,5,6,10], [1,5,8,9]],      // 4,  5,  6,  7
@@ -134,7 +148,7 @@ impl Tetromino {
 
         // EDGE CASE FOR ROTATION
         while self.collides_with_frame(lb, rb, f) {
-            if self.tiles.iter().any(|t| all_tiles.contains(t)) {
+            if self.tiles.iter().any(|t| all_tiles.contains_key(t)) {
                 self.pos_x = org_x;
                 self.r_angle = prev_angle;
                 self.m_shape = variations[self.r_angle];
@@ -145,11 +159,11 @@ impl Tetromino {
             else {self.pos_x -= 1}
         }
         self.mut_tiles_pos();
-        if self.tiles.iter().any(|t| all_tiles.contains(t)) {
+        if self.tiles.iter().any(|t| all_tiles.contains_key(t)) {
             let mut columns = 0;
             let mut pos_y = 0;
             for tile in self.tiles.iter() {
-                if all_tiles.contains(tile) && columns < 2 {
+                if all_tiles.contains_key(tile) && columns < 2 {
                     if pos_y != tile.1 {
                         columns += 1;
                         pos_y = tile.1;
